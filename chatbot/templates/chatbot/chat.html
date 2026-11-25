@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% if conversa %}{{ conversa.titulo }} · {% endif %}Chatbot</title>
+  <style>
+    :root {
+      --fundo: #f6f6f3; --painel: #ffffff; --borda: #e3e2dc; --texto: #1f1f1c;
+      --suave: #6b6a63; --destaque: #2f6f5e; --destaque-texto: #ffffff;
+      --balao-user: #2f6f5e; --balao-bot: #ffffff; --erro: #b3261e;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --fundo: #161615; --painel: #1f1f1d; --borda: #33332f; --texto: #ecebe6;
+        --suave: #9a998f; --destaque: #4fa58c; --destaque-texto: #0f1412;
+        --balao-user: #2c5b4e; --balao-bot: #262624; --erro: #f2867d;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; height: 100vh; display: grid; grid-template-columns: 270px 1fr;
+      font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: var(--fundo); color: var(--texto);
+    }
+    aside {
+      background: var(--painel); border-right: 1px solid var(--borda);
+      display: flex; flex-direction: column; min-height: 0;
+    }
+    aside header { padding: 16px; border-bottom: 1px solid var(--borda); }
+    aside h1 { font-size: 17px; margin: 0 0 12px; }
+    .botao {
+      width: 100%; padding: 9px 12px; border: 0; border-radius: 8px; cursor: pointer;
+      background: var(--destaque); color: var(--destaque-texto); font: inherit; font-weight: 600;
+    }
+    nav { overflow-y: auto; padding: 8px; flex: 1; }
+    nav a {
+      display: block; padding: 8px 10px; border-radius: 6px; color: inherit; text-decoration: none;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    nav a:hover { background: var(--fundo); }
+    nav a.ativa { background: var(--fundo); font-weight: 600; }
+    nav .vazio { color: var(--suave); padding: 8px 10px; font-size: 14px; }
+    aside footer { padding: 12px 16px; border-top: 1px solid var(--borda); color: var(--suave); font-size: 13px; }
+
+    main { display: flex; flex-direction: column; min-height: 0; }
+    .topo {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 12px 24px; border-bottom: 1px solid var(--borda); background: var(--painel);
+    }
+    .topo h2 { font-size: 16px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .link-perigo { background: none; border: 0; color: var(--erro); cursor: pointer; font: inherit; font-size: 14px; }
+    #mensagens { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 12px; }
+    .msg { max-width: min(720px, 85%); padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; word-wrap: break-word; }
+    .msg.user { align-self: flex-end; background: var(--balao-user); color: #fff; border-bottom-right-radius: 4px; }
+    .msg.assistant { align-self: flex-start; background: var(--balao-bot); border: 1px solid var(--borda); border-bottom-left-radius: 4px; }
+    .msg.pensando { color: var(--suave); font-style: italic; }
+    .msg.erro { align-self: center; background: none; border: 1px solid var(--erro); color: var(--erro); font-size: 14px; }
+    .boas-vindas { margin: auto; text-align: center; color: var(--suave); max-width: 420px; }
+    .boas-vindas h2 { color: var(--texto); }
+    .boas-vindas .botao { width: auto; padding: 10px 20px; }
+
+    form.envio { display: flex; gap: 10px; padding: 16px 24px 20px; border-top: 1px solid var(--borda); background: var(--painel); }
+    form.envio textarea {
+      flex: 1; resize: none; min-height: 44px; max-height: 180px; padding: 10px 12px; overflow-y: hidden;
+      border: 1px solid var(--borda); border-radius: 10px; font: inherit;
+      background: var(--fundo); color: var(--texto);
+    }
+    form.envio textarea:focus { outline: 2px solid var(--destaque); outline-offset: -1px; }
+    form.envio .botao { width: auto; padding: 0 20px; }
+    .botao:disabled { opacity: .55; cursor: wait; }
+
+    @media (max-width: 700px) {
+      body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+      aside { max-height: 35vh; border-right: 0; border-bottom: 1px solid var(--borda); }
+    }
+  </style>
+</head>
+<body>
+  <aside>
+    <header>
+      <h1>Chatbot</h1>
+      <form method="post" action="{% url 'chatbot:nova_conversa' %}">
+        {% csrf_token %}
+        <button class="botao" type="submit">+ Nova conversa</button>
+      </form>
+    </header>
+    <nav>
+      {% for c in conversas %}
+        <a href="{% url 'chatbot:conversa' c.pk %}" class="{% if conversa and c.pk == conversa.pk %}ativa{% endif %}"
+           {% if conversa and c.pk == conversa.pk %}id="conversa-ativa"{% endif %}>{{ c.titulo }}</a>
+      {% empty %}
+        <p class="vazio">Nenhuma conversa ainda.</p>
+      {% endfor %}
+    </nav>
+    <footer>Modelo: {{ modelo }} (Ollama)</footer>
+  </aside>
+
+  <main>
+    {% if conversa %}
+      <div class="topo">
+        <h2 id="titulo">{{ conversa.titulo }}</h2>
+        <form method="post" action="{% url 'chatbot:excluir_conversa' conversa.pk %}"
+              onsubmit="return confirm('Excluir esta conversa?');">
+          {% csrf_token %}
+          <button class="link-perigo" type="submit">Excluir</button>
+        </form>
+      </div>
+
+      <div id="mensagens">
+        {% for m in mensagens %}
+          <div class="msg {{ m.papel }}">{{ m.conteudo }}</div>
+        {% empty %}
+          <div class="boas-vindas" id="boas-vindas">
+            <h2>Sobre o que vamos conversar?</h2>
+            <p>Escreva sua mensagem abaixo. Enter envia, Shift+Enter quebra a linha.</p>
+          </div>
+        {% endfor %}
+      </div>
+
+      <form class="envio" id="form-envio" method="post" action="{% url 'chatbot:enviar_mensagem' conversa.pk %}">
+        {% csrf_token %}
+        <textarea name="mensagem" id="campo" rows="1" maxlength="4000" placeholder="Digite sua mensagem…" required autofocus></textarea>
+        <button class="botao" type="submit" id="enviar">Enviar</button>
+      </form>
+    {% else %}
+      <div id="mensagens">
+        <div class="boas-vindas">
+          <h2>Bem-vindo ao Chatbot</h2>
+          <p>Um assistente que roda no seu computador, sem custo, com o Ollama.</p>
+          <form method="post" action="{% url 'chatbot:nova_conversa' %}">
+            {% csrf_token %}
+            <button class="botao" type="submit">Começar uma conversa</button>
+          </form>
+        </div>
+      </div>
+    {% endif %}
+  </main>
+
+  {% if conversa %}
+  <script>
+    const form = document.getElementById('form-envio');
+    const campo = document.getElementById('campo');
+    const botao = document.getElementById('enviar');
+    const lista = document.getElementById('mensagens');
+
+    function adicionar(texto, classe) {
+      document.getElementById('boas-vindas')?.remove();
+      const div = document.createElement('div');
+      div.className = 'msg ' + classe;
+      div.textContent = texto;
+      lista.appendChild(div);
+      lista.scrollTop = lista.scrollHeight;
+      return div;
+    }
+
+    function ajustarAltura() {
+      campo.style.height = 'auto';
+      campo.style.height = Math.min(campo.scrollHeight, 180) + 'px';
+      campo.style.overflowY = campo.scrollHeight > 180 ? 'auto' : 'hidden';
+    }
+
+    campo.addEventListener('input', ajustarAltura);
+    campo.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        form.requestSubmit();
+      }
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const texto = campo.value.trim();
+      if (!texto || botao.disabled) return;
+
+      const dados = new FormData(form);
+      lista.querySelectorAll('.msg.erro').forEach((el) => el.remove());
+      adicionar(texto, 'user');
+      campo.value = '';
+      ajustarAltura();
+      botao.disabled = true;
+      const pensando = adicionar('Pensando…', 'assistant pensando');
+
+      try {
+        const resp = await fetch(form.action, { method: 'POST', body: dados });
+        const json = await resp.json();
+        pensando.remove();
+        if (!resp.ok) throw new Error(json.erro || 'Erro inesperado.');
+        adicionar(json.resposta, 'assistant');
+        document.getElementById('titulo').textContent = json.titulo;
+        const ativa = document.getElementById('conversa-ativa');
+        if (ativa) ativa.textContent = json.titulo;
+      } catch (erro) {
+        pensando.remove();
+        lista.lastElementChild?.remove();  // tira a mensagem do usuário, que não foi salva
+        campo.value = texto;               // devolve o texto para reenviar
+        ajustarAltura();
+        adicionar(erro.message || 'Falha de conexão com o servidor.', 'erro');
+      } finally {
+        botao.disabled = false;
+        campo.focus();
+      }
+    });
+
+    lista.scrollTop = lista.scrollHeight;
+  </script>
+  {% endif %}
+</body>
+</html>
