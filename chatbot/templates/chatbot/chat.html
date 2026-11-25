@@ -105,9 +105,14 @@
 
     /* ---------- Área do chat ---------- */
     main { display: flex; flex-direction: column; min-height: 0; }
-    .topo { padding: 14px 24px; border-bottom: 1px solid var(--borda); background: var(--painel); }
+    .topo {
+      display: flex; align-items: center; gap: 8px; min-width: 0;
+      padding: 14px 24px; border-bottom: 1px solid var(--borda); background: var(--painel);
+    }
     .topo h2 { font-size: 16px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #mensagens { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 12px; }
+    /* flex: none impede que balões sejam espremidos quando a área de mensagens é baixa */
+    .msg, .carregando { flex: none; }
     .msg { max-width: min(720px, 85%); padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; word-wrap: break-word; }
     .msg.user { align-self: flex-end; background: var(--balao-user); color: #fff; border-bottom-right-radius: 4px; }
     .msg.assistant { align-self: flex-start; background: var(--balao-bot); border: 1px solid var(--borda); border-bottom-left-radius: 4px; }
@@ -180,15 +185,39 @@
     form.envio textarea:focus { outline: 2px solid var(--destaque); outline-offset: -1px; }
     form.envio .botao { width: auto; padding: 0 20px; }
 
-    @media (max-width: 700px) {
-      body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
-      aside { max-height: 35vh; border-right: 0; border-bottom: 1px solid var(--borda); }
+    /* ---------- Telas estreitas: barra lateral vira gaveta ---------- */
+    .abrir-lateral {
+      display: none; flex: none; width: 34px; height: 34px; margin-left: -8px; border: 0; border-radius: 8px;
+      background: none; cursor: pointer; place-items: center; color: var(--texto);
     }
+    .abrir-lateral:hover { background: var(--hover); }
+    .veu { display: none; }
+
+    @media (max-width: 700px) {
+      body { grid-template-columns: 1fr; height: 100dvh; }
+      aside {
+        position: fixed; z-index: 15; inset: 0 auto 0 0; width: min(300px, 85vw);
+        transform: translateX(-100%); transition: transform .22s ease-out; box-shadow: var(--sombra);
+      }
+      body.lateral-aberta aside { transform: none; }
+      .veu {
+        display: block; position: fixed; inset: 0; z-index: 14; background: rgba(0, 0, 0, .45);
+        opacity: 0; pointer-events: none; transition: opacity .22s;
+      }
+      body.lateral-aberta .veu { opacity: 1; pointer-events: auto; }
+      .abrir-lateral { display: grid; }
+      .topo { padding: 10px 16px; }
+      #mensagens { padding: 16px; }
+      form.envio { padding: 12px 16px 14px; }
+      .msg { max-width: 92%; }
+    }
+    @media (prefers-reduced-motion: reduce) { aside, .veu { transition: none; } }
   </style>
 </head>
 <body>
   {% csrf_token %}
-  <aside>
+  <div class="veu" id="veu"></div>
+  <aside id="lateral">
     <header>
       <h1>Chatbot</h1>
       <form method="post" action="{% url 'chatbot:nova_conversa' %}">
@@ -242,8 +271,17 @@
   </dialog>
 
   <main>
+    <div class="topo">
+      <button class="abrir-lateral" id="abrir-lateral" type="button" aria-label="Abrir lista de conversas"
+              aria-controls="lateral" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+          <path d="M3 5.5h14M3 10h14M3 14.5h14"/>
+        </svg>
+      </button>
+      <h2 id="titulo">{% if conversa %}{{ conversa.titulo }}{% else %}Chatbot{% endif %}</h2>
+    </div>
+
     {% if conversa %}
-      <div class="topo"><h2 id="titulo">{{ conversa.titulo }}</h2></div>
 
       <div id="mensagens">
         {% for m in mensagens %}
@@ -289,6 +327,24 @@
       if (!resp.ok) throw new Error(json.erro || 'Não foi possível concluir a ação.');
       return json;
     }
+
+    /* ---------- Gaveta da barra lateral (telas estreitas) ---------- */
+    const botaoLateral = document.getElementById('abrir-lateral');
+
+    function alternarLateral(abrir) {
+      document.body.classList.toggle('lateral-aberta', abrir);
+      botaoLateral.setAttribute('aria-expanded', String(abrir));
+      if (abrir) document.querySelector('#lateral .botao').focus();
+    }
+
+    botaoLateral.addEventListener('click', () => alternarLateral(true));
+    document.getElementById('veu').addEventListener('click', () => alternarLateral(false));
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !itemDoMenu && document.body.classList.contains('lateral-aberta')) {
+        alternarLateral(false);
+        botaoLateral.focus();
+      }
+    });
 
     /* ---------- Menu de 3 pontos ---------- */
     const menu = document.getElementById('menu');
