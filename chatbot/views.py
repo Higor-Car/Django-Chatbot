@@ -25,10 +25,27 @@ def nova_conversa(request):
     return redirect('chatbot:conversa', conversa_id=Conversa.objects.create().pk)
 
 
+def _quer_json(request):
+    return 'application/json' in request.headers.get('Accept', '')
+
+
 @require_POST
 def excluir_conversa(request, conversa_id):
     get_object_or_404(Conversa, pk=conversa_id).delete()
+    if _quer_json(request):
+        return JsonResponse({'ok': True})
     return redirect('chatbot:inicio')
+
+
+@require_POST
+def renomear_conversa(request, conversa_id):
+    conversa = get_object_or_404(Conversa, pk=conversa_id)
+    titulo = request.POST.get('titulo', '').strip()
+    if not titulo:
+        return JsonResponse({'erro': 'O nome não pode ficar vazio.'}, status=400)
+    conversa.titulo = titulo[:100]
+    conversa.save(update_fields=['titulo'])  # renomear não deve mudar a ordem da lista
+    return JsonResponse({'titulo': conversa.titulo})
 
 
 @require_POST

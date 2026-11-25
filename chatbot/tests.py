@@ -132,3 +132,35 @@ class ChatViewsTests(TestCase):
         resposta = self.client.post(reverse('chatbot:excluir_conversa', args=[self.conversa.pk]))
         self.assertRedirects(resposta, reverse('chatbot:inicio'))
         self.assertFalse(Conversa.objects.exists())
+
+    def test_excluir_conversa_via_menu_responde_json(self):
+        outra = Conversa.objects.create(titulo='Fica')
+        resposta = self.client.post(
+            reverse('chatbot:excluir_conversa', args=[self.conversa.pk]),
+            headers={'Accept': 'application/json'},
+        )
+        self.assertEqual(resposta.json(), {'ok': True})
+        self.assertEqual(list(Conversa.objects.all()), [outra])
+
+    def test_renomear_conversa(self):
+        url = reverse('chatbot:renomear_conversa', args=[self.conversa.pk])
+        resposta = self.client.post(url, {'titulo': '  Receitas de bolo  '})
+        self.assertEqual(resposta.json(), {'titulo': 'Receitas de bolo'})
+        self.conversa.refresh_from_db()
+        self.assertEqual(self.conversa.titulo, 'Receitas de bolo')
+
+    def test_renomear_nao_muda_ordem_da_lista(self):
+        mais_recente = Conversa.objects.create(titulo='Mais recente')
+        self.client.post(reverse('chatbot:renomear_conversa', args=[self.conversa.pk]), {'titulo': 'Novo nome'})
+        self.assertEqual(Conversa.objects.first(), mais_recente)
+
+    def test_renomear_rejeita_nome_vazio(self):
+        url = reverse('chatbot:renomear_conversa', args=[self.conversa.pk])
+        self.assertEqual(self.client.post(url, {'titulo': '   '}).status_code, 400)
+        self.conversa.refresh_from_db()
+        self.assertEqual(self.conversa.titulo, 'Nova conversa')
+
+    def test_pagina_mostra_menu_de_opcoes(self):
+        resposta = self.client.get(reverse('chatbot:conversa', args=[self.conversa.pk]))
+        self.assertContains(resposta, 'aria-haspopup="menu"')
+        self.assertContains(resposta, reverse('chatbot:renomear_conversa', args=[self.conversa.pk]))
