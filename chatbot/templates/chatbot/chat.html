@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="pt-br">
 <head>
   <meta charset="utf-8">
@@ -9,7 +9,7 @@
       --fundo: #f6f6f3; --painel: #ffffff; --borda: #e3e2dc; --texto: #1f1f1c;
       --suave: #6b6a63; --destaque: #2f6f5e; --destaque-texto: #ffffff;
       --balao-user: #2f6f5e; --balao-bot: #ffffff; --erro: #b3261e; --erro-texto: #ffffff;
-      --hover: #efeee9; --sombra: 0 8px 28px rgba(0, 0, 0, .14);
+      --hover: #efeee9; --sombra: 0 8px 28px rgba(0, 0, 0, .14); --codigo-fundo: #f4f3ef;
       --brilho-1: #2f6f5e; --brilho-2: #c0842d; --brilho-3: #5b6fd1;
     }
     @media (prefers-color-scheme: dark) {
@@ -17,7 +17,7 @@
         --fundo: #161615; --painel: #1f1f1d; --borda: #33332f; --texto: #ecebe6;
         --suave: #9a998f; --destaque: #4fa58c; --destaque-texto: #0f1412;
         --balao-user: #2c5b4e; --balao-bot: #262624; --erro: #f2867d; --erro-texto: #2a0d0a;
-        --hover: #2a2a27; --sombra: 0 8px 28px rgba(0, 0, 0, .5);
+        --hover: #2a2a27; --sombra: 0 8px 28px rgba(0, 0, 0, .5); --codigo-fundo: #191917;
         --brilho-1: #5cc2a3; --brilho-2: #e3a94f; --brilho-3: #8c9cf0;
       }
     }
@@ -117,6 +117,40 @@
     .msg.user { align-self: flex-end; background: var(--balao-user); color: #fff; border-bottom-right-radius: 4px; }
     .msg.assistant { align-self: flex-start; background: var(--balao-bot); border: 1px solid var(--borda); border-bottom-left-radius: 4px; }
     .msg.nova { animation: surgir .25s ease-out; }
+    /* ---------- Respostas formatadas (Markdown) ---------- */
+    .msg.md { white-space: normal; }
+    .md > :first-child { margin-top: 0; }
+    .md > :last-child { margin-bottom: 0; }
+    .md p { margin: 0 0 .7em; }
+    .md h3, .md h4, .md h5, .md h6 { margin: 1em 0 .4em; line-height: 1.3; }
+    .md h3 { font-size: 1.15em; } .md h4 { font-size: 1.05em; } .md h5, .md h6 { font-size: 1em; }
+    .md ul, .md ol { margin: 0 0 .7em; padding-left: 1.5em; }
+    .md li { margin: .2em 0; }
+    .md li > ul, .md li > ol { margin: .2em 0 0; }
+    .md a { color: var(--destaque); text-underline-offset: 2px; }
+    .md hr { border: 0; border-top: 1px solid var(--borda); margin: 1em 0; }
+    .md blockquote { margin: 0 0 .7em; padding: .1em 0 .1em 12px; border-left: 3px solid var(--borda); color: var(--suave); }
+    .md code {
+      font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: .9em;
+      background: var(--codigo-fundo); border: 1px solid var(--borda); border-radius: 5px; padding: .1em .35em;
+    }
+    .bloco-codigo { margin: .3em 0 .8em; border: 1px solid var(--borda); border-radius: 10px; overflow: hidden; background: var(--codigo-fundo); }
+    .bloco-codigo-topo {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 4px 6px 4px 12px; border-bottom: 1px solid var(--borda); font-size: 12px; color: var(--suave);
+    }
+    .copiar-codigo {
+      border: 0; background: none; color: var(--suave); cursor: pointer; font-size: 12px;
+      padding: 3px 8px; border-radius: 5px;
+    }
+    .copiar-codigo:hover { background: var(--hover); color: var(--texto); }
+    .bloco-codigo pre { margin: 0; padding: 12px 14px; overflow-x: auto; }
+    .bloco-codigo pre code { background: none; border: 0; padding: 0; font-size: 13.5px; line-height: 1.55; white-space: pre; }
+    .md .tabela { overflow-x: auto; margin: 0 0 .7em; }
+    .md table { border-collapse: collapse; font-size: .95em; }
+    .md th, .md td { border: 1px solid var(--borda); padding: 6px 10px; text-align: left; vertical-align: top; }
+    .md th { background: var(--codigo-fundo); font-weight: 600; }
+
     .msg.erro { align-self: center; background: none; border: 1px solid var(--erro); color: var(--erro); font-size: 14px; }
     .boas-vindas { margin: auto; text-align: center; color: var(--suave); max-width: 420px; }
     .boas-vindas h2 { color: var(--texto); }
@@ -313,8 +347,41 @@
     {% endif %}
   </main>
 
+  <script src="{% static 'chatbot/markdown.js' %}"></script>
   <script>
     const CSRF = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+    /* ---------- Respostas em Markdown ---------- */
+    function formatarResposta(el, texto) {
+      el.classList.add('md');
+      el.innerHTML = renderizarMarkdown(texto);  // o renderizador escapa todo o HTML antes de formatar
+    }
+
+    document.querySelectorAll('.msg.assistant').forEach((el) => formatarResposta(el, el.textContent));
+
+    async function copiarTexto(texto) {
+      try {
+        await navigator.clipboard.writeText(texto);
+      } catch {
+        const area = document.createElement('textarea');
+        area.value = texto;
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand('copy');
+        area.remove();
+      }
+    }
+
+    document.addEventListener('click', async (e) => {
+      const botao = e.target.closest('.copiar-codigo');
+      if (!botao) return;
+      await copiarTexto(botao.closest('.bloco-codigo').querySelector('code').textContent);
+      botao.textContent = 'Copiado!';
+      clearTimeout(botao._timer);
+      botao._timer = setTimeout(() => { botao.textContent = 'Copiar'; }, 1500);
+    });
     const CONVERSA_ATUAL = {% if conversa %}{{ conversa.pk }}{% else %}null{% endif %};
 
     async function postar(url, dados = {}) {
@@ -491,7 +558,8 @@
         document.getElementById('boas-vindas')?.remove();
         const div = document.createElement('div');
         div.className = 'msg nova ' + classe;
-        div.textContent = texto;
+        if (classe === 'assistant') formatarResposta(div, texto);
+        else div.textContent = texto;
         mensagens.appendChild(div);
         mensagens.scrollTop = mensagens.scrollHeight;
         return div;

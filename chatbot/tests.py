@@ -160,6 +160,20 @@ class ChatViewsTests(TestCase):
         self.conversa.refresh_from_db()
         self.assertEqual(self.conversa.titulo, 'Nova conversa')
 
+    def test_pagina_carrega_renderizador_de_markdown(self):
+        from django.contrib.staticfiles import finders
+
+        resposta = self.client.get(reverse('chatbot:conversa', args=[self.conversa.pk]))
+        self.assertContains(resposta, 'chatbot/markdown.js')
+        self.assertIsNotNone(finders.find('chatbot/markdown.js'))
+
+    def test_resposta_do_modelo_vai_escapada_no_html(self):
+        # O Markdown é formatado no navegador; o servidor nunca deve mandar HTML do modelo sem escapar.
+        Mensagem.objects.create(conversa=self.conversa, papel='assistant', conteudo='<script>alert(1)</script>')
+        resposta = self.client.get(reverse('chatbot:conversa', args=[self.conversa.pk]))
+        self.assertContains(resposta, '&lt;script&gt;alert(1)&lt;/script&gt;')
+        self.assertNotContains(resposta, '<script>alert(1)</script>')
+
     def test_pagina_mostra_menu_de_opcoes(self):
         resposta = self.client.get(reverse('chatbot:conversa', args=[self.conversa.pk]))
         self.assertContains(resposta, 'aria-haspopup="menu"')
